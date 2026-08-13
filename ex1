@@ -1,0 +1,109 @@
+476
+#include <stdio.h>
+
+int findComplement(int num) {
+    int bitLength = 32 - __builtin_clz((unsigned int)num);
+    unsigned int mask = (1ULL << bitLength) - 1;
+    return num ^ mask;
+}
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------
+338
+#include <stdio.h>
+#include <stdlib.h>
+int* countBits(int n, int* returnSize) {
+    *returnSize = n + 1;
+    int* result = (int*)malloc((*returnSize) * sizeof(int));
+    if (result == NULL) {
+        return NULL;
+    }
+    result[0] = 0;
+    for (int i = 1; i <= n; i++) {
+        // i >> 1 divides by 2, i & 1 checks if the number is odd
+        result[i] = result[i >> 1] + (i & 1);
+    }
+    
+    return result;
+}
+----------------------------------------------------------------------------------------------------------------------------------------------------
+421
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#define HASH_SIZE 10007
+
+typedef struct Node {
+    int val;
+    struct Node* next;
+} Node;
+
+void insert(Node** hashTable, int val) {
+    int index = abs(val) % HASH_SIZE;
+    Node* curr = hashTable[index];
+    
+    while (curr != NULL) {
+        if (curr->val == val) return;
+        curr = curr->next;
+    }
+    
+    Node* newNode = (Node*)malloc(sizeof(Node));
+    newNode->val = val;
+    newNode->next = hashTable[index];
+    hashTable[index] = newNode;
+}
+
+bool search(Node** hashTable, int val) {
+    int index = abs(val) % HASH_SIZE;
+    Node* curr = hashTable[index];
+    while (curr != NULL) {
+        if (curr->val == val) return true;
+        curr = curr->next;
+    }
+    return false;
+}
+
+void clearHashTable(Node** hashTable) {
+    for (int i = 0; i < HASH_SIZE; i++) {
+        Node* curr = hashTable[i];
+        while (curr != NULL) {
+            Node* temp = curr;
+            curr = curr->next;
+            free(temp);
+        }
+        hashTable[i] = NULL;
+    }
+}
+
+int findMaximumXOR(int* nums, int numsSize) {
+    int maxResult = 0;
+    int mask = 0;
+    Node* hashTable[HASH_SIZE] = {NULL};
+
+    for (int i = 30; i >= 0; i--) {
+        mask |= (1 << i);
+        int greedyTry = maxResult | (1 << i);
+        
+        for (int j = 0; j < numsSize; j++) {
+            insert(hashTable, nums[j] & mask);
+        }
+        
+        for (int j = 0; j < numsSize; j++) {
+            int prefix = nums[j] & mask;
+            if (search(hashTable, prefix ^ greedyTry)) {
+                maxResult = greedyTry;
+                break;
+            }
+        }
+        
+        clearHashTable(hashTable);
+    }
+    
+    return maxResult;
+}
+
+
+
