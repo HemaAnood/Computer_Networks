@@ -1,1 +1,443 @@
+815.
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
+typedef struct {
+    int stop;
+    int busCount;
+} QueueNode;
+
+int numBusesToDestination(int** routes, int routesSize, int* routesColSize, int source, int target) {
+    if (source == target) return 0;
+    int maxStop = 0;
+    for (int i = 0; i < routesSize; i++) {
+        for (int j = 0; j < routesColSize[i]; j++) {
+            if (routes[i][j] > maxStop) {
+                maxStop = routes[i][j];
+            }
+        }
+    }
+    if (source > maxStop) maxStop = source;
+    if (target > maxStop) maxStop = target;
+    int* stopToBusesSizes = (int*)calloc(maxStop + 1, sizeof(int));
+    for (int i = 0; i < routesSize; i++) {
+        for (int j = 0; j < routesColSize[i]; j++) {
+            stopToBusesSizes[routes[i][j]]++;
+        }
+    }
+    int** stopToBuses = (int**)malloc((maxStop + 1) * sizeof(int*));
+    for (int i = 0; i <= maxStop; i++) {
+        if (stopToBusesSizes[i] > 0) {
+            stopToBuses[i] = (int*)malloc(stopToBusesSizes[i] * sizeof(int));
+        } else {
+            stopToBuses[i] = NULL;
+        }
+    }
+    int* currentIndices = (int*)calloc(maxStop + 1, sizeof(int));
+    for (int i = 0; i < routesSize; i++) {
+        for (int j = 0; j < routesColSize[i]; j++) {
+            int stop = routes[i][j];
+            stopToBuses[stop][currentIndices[stop]++] = i;
+        }
+    }
+    free(currentIndices);
+
+    bool* visitedBuses = (bool*)calloc(routesSize, sizeof(bool));
+    bool* visitedStops = (bool*)calloc(maxStop + 1, sizeof(bool));
+    int maxQueueSize = maxStop + routesSize + 2; 
+    QueueNode* queue = (QueueNode*)malloc(maxQueueSize * sizeof(QueueNode));
+    int head = 0, tail = 0;
+    queue[tail++] = (QueueNode){source, 0};
+    visitedStops[source] = true;
+
+    int minBuses = -1;
+    while (head < tail) {
+        QueueNode curr = queue[head++];
+        int currStop = curr.stop;
+        int currCount = curr.busCount;
+
+        if (currStop == target) {
+            minBuses = currCount;
+            break;
+        }
+
+        for (int i = 0; i < stopToBusesSizes[currStop]; i++) {
+            int busId = stopToBuses[currStop][i];
+
+            if (!visitedBuses[busId]) {
+                visitedBuses[busId] = true;
+                for (int j = 0; j < routesColSize[busId]; j++) {
+                    int nextStop = routes[busId][j];
+
+                    if (!visitedStops[nextStop]) {
+                        visitedStops[nextStop] = true;
+                        queue[tail++] = (QueueNode){nextStop, currCount + 1};
+                    }
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i <= maxStop; i++) {
+        if (stopToBuses[i] != NULL) free(stopToBuses[i]);
+    }
+    free(stopToBuses);
+    free(stopToBusesSizes);
+    free(visitedBuses);
+    free(visitedStops);
+    free(queue);
+
+    return minBuses;
+}
+
+1466.
+#include <stdlib.h>
+#include <stdbool.h>
+
+typedef struct AdjNode {
+    int to;
+    int dir; 
+    struct AdjNode* next;
+} AdjNode;
+
+void dfs(int node, AdjNode** graph, bool* visited, int* count) {
+    visited[node] = true;
+    AdjNode* curr = graph[node];
+    while (curr != NULL) {
+        if (!visited[curr->to]) {
+            if (curr->dir == 1) {
+                (*count)++;
+            }
+            dfs(curr->to, graph, visited, count);
+        }
+        curr = curr->next;
+    }
+}
+
+int minReorder(int n, int** connections, int connectionsSize, int* connectionsColSize) {
+    AdjNode** graph = (AdjNode**)calloc(n, sizeof(AdjNode*));
+    
+    for (int i = 0; i < connectionsSize; i++) {
+        int u = connections[i][0];
+        int v = connections[i][1];
+        
+        AdjNode* node1 = (AdjNode*)malloc(sizeof(AdjNode));
+        node1->to = v;
+        node1->dir = 1; 
+        node1->next = graph[u];
+        graph[u] = node1;
+        
+        AdjNode* node2 = (AdjNode*)malloc(sizeof(AdjNode));
+        node2->to = u;
+        node2->dir = 0; 
+        node2->next = graph[v];
+        graph[v] = node2;
+    }
+    
+    bool* visited = (bool*)calloc(n, sizeof(bool));
+    int count = 0;
+    
+    dfs(0, graph, visited, &count);
+    
+    for (int i = 0; i < n; i++) {
+        AdjNode* curr = graph[i];
+        while (curr != NULL) {
+            AdjNode* temp = curr;
+            curr = curr->next;
+            free(temp);
+        }
+    }
+    free(graph);
+    free(visited);
+    
+    return count;
+}
+
+743
+    #include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+
+#define INF INT_MAX
+
+// Structure to represent an edge in the adjacency list
+typedef struct Node {
+    int target;
+    int weight;
+    struct Node* next;
+} Node;
+
+int networkDelayTime(int** times, int timesSize, int* timesColSize, int n, int k) {
+    // 1. Initialize the adjacency list for nodes 1 to n
+    Node** graph = (Node**)calloc((n + 1), sizeof(Node*));
+    for (int i = 0; i < timesSize; i++) {
+        int u = times[i][0];
+        int v = times[i][1];
+        int w = times[i][2];
+        
+        Node* newNode = (Node*)malloc(sizeof(Node));
+        newNode->target = v;
+        newNode->weight = w;
+        newNode->next = graph[u];
+        graph[u] = newNode;
+    }
+
+    // 2. Initialize distance array and visited array
+    int* dist = (int*)malloc((n + 1) * sizeof(int));
+    int* visited = (int*)calloc((n + 1), sizeof(int));
+    for (int i = 1; i <= n; i++) {
+        dist[i] = INF;
+    }
+    dist[k] = 0;
+
+    // 3. Dijkstra's Algorithm using a basic min-scan (suitable for N up to 100)
+    for (int count = 1; count <= n; count++) {
+        // Find the unvisited node with the minimum distance
+        int u = -1;
+        int minDist = INF;
+        for (int i = 1; i <= n; i++) {
+            if (!visited[i] && dist[i] < minDist) {
+                minDist = dist[i];
+                u = i;
+            }
+        }
+
+        // If we can't find a reachable node, break early
+        if (u == -1) break;
+
+        visited[u] = 1;
+
+        // Update distances of neighboring nodes
+        Node* curr = graph[u];
+        while (curr != NULL) {
+            int v = curr->target;
+            int w = curr->weight;
+            if (!visited[v] && dist[u] != INF && dist[u] + w < dist[v]) {
+                dist[v] = dist[u] + w;
+            }
+            curr = curr->next;
+        }
+    }
+
+    // 4. Find the maximum time taken to reach any node
+    int maxDelay = 0;
+    for (int i = 1; i <= n; i++) {
+        if (dist[i] == INF) {
+            // Memory cleanup before returning
+            for (int j = 1; j <= n; j++) {
+                Node* curr = graph[j];
+                while (curr) {
+                    Node* temp = curr;
+                    curr = curr->next;
+                    free(temp);
+                }
+            }
+            free(graph);
+            free(dist);
+            free(visited);
+            return -1; // Node i is unreachable
+        }
+        if (dist[i] > maxDelay) {
+            maxDelay = dist[i];
+        }
+    }
+
+    // Free allocated memory
+    for (int i = 1; i <= n; i++) {
+        Node* curr = graph[i];
+        while (curr) {
+            Node* temp = curr;
+            curr = curr->next;
+            free(temp);
+        }
+    }
+    free(graph);
+    free(dist);
+    free(visited);
+
+    return maxDelay;
+}
+ 1631
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <limits.h>
+
+typedef struct {
+    int row;
+    int col;
+    int effort;
+} HeapNode;
+
+
+typedef struct {
+    HeapNode* data;
+    int size;
+    int capacity;
+} MinHeap;
+
+MinHeap* createMinHeap(int capacity) {
+    MinHeap* heap = (MinHeap*)malloc(sizeof(MinHeap));
+    heap->data = (HeapNode*)malloc(sizeof(HeapNode) * capacity);
+    heap->size = 0;
+    heap->capacity = capacity;
+    return heap;
+}
+
+void swapNodes(HeapNode* a, HeapNode* b) {
+    HeapNode temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+void minHeapify(MinHeap* heap, int idx) {
+    int smallest = idx;
+    int left = 2 * idx + 1;
+    int right = 2 * idx + 2;
+
+    if (left < heap->size && heap->data[left].effort < heap->data[smallest].effort)
+        smallest = left;
+
+    if (right < heap->size && heap->data[right].effort < heap->data[smallest].effort)
+        smallest = right;
+
+    if (smallest != idx) {
+        swapNodes(&heap->data[idx], &heap->data[smallest]);
+        minHeapify(heap, smallest);
+    }
+}
+void pushHeap(MinHeap* heap, HeapNode node) {
+    if (heap->size == heap->capacity) return;
+
+    heap->data[heap->size] = node;
+    int i = heap->size;
+    heap->size++;
+
+    while (i != 0 && heap->data[(i - 1) / 2].effort > heap->data[i].effort) {
+        swapNodes(&heap->data[i], &heap->data[(i - 1) / 2]);
+        i = (i - 1) / 2;
+    }
+}
+
+HeapNode popHeap(MinHeap* heap) {
+    if (heap->size <= 0) {
+        HeapNode empty = {-1, -1, -1};
+        return empty;
+    }
+    if (heap->size == 1) {
+        heap->size--;
+        return heap->data[0];
+    }
+
+    HeapNode root = heap->data[0];
+    heap->data[0] = heap->data[heap->size - 1];
+    heap->size--;
+    minHeapify(heap, 0);
+
+    return root;
+}
+
+int minimumEffortPath(int** heights, int heightsSize, int* heightsColSize) {
+    int rows = heightsSize;
+    int cols = heightsColSize[0];
+
+    int** effortGrid = (int**)malloc(rows * sizeof(int*));
+    for (int i = 0; i < rows; i++) {
+        effortGrid[i] = (int*)malloc(cols * sizeof(int));
+        for (int j = 0; j < cols; j++) {
+            effortGrid[i][j] = INT_MAX;
+        }
+    }
+
+    int dRow[] = {-1, 1, 0, 0};
+    int dCol[] = {0, 0, -1, 1};
+
+    MinHeap* heap = createMinHeap(rows * cols * 4);
+    effortGrid[0][0] = 0;
+    HeapNode start = {0, 0, 0};
+    pushHeap(heap, start);
+
+    while (heap->size > 0) {
+        HeapNode curr = popHeap(heap);
+        int r = curr.row;
+        int c = curr.col;
+        int currentEffort = curr.effort;
+
+        if (r == rows - 1 && c == cols - 1) {
+
+            free(heap->data);
+            free(heap);
+            for (int i = 0; i < rows; i++) free(effortGrid[i]);
+            free(effortGrid);
+            return currentEffort;
+        }
+
+        if (currentEffort > effortGrid[r][c]) continue;
+
+        for (int i = 0; i < 4; i++) {
+            int newR = r + dRow[i];
+            int newC = c + dCol[i];
+
+            if (newR >= 0 && newR < rows && newC >= 0 && newC < cols) {
+                // Effort is the max difference in heights along this move
+                int diff = abs(heights[r][c] - heights[newR][newC]);
+                int nextEffort = (currentEffort > diff) ? currentEffort : diff;
+
+                if (nextEffort < effortGrid[newR][newC]) {
+                    effortGrid[newR][newC] = nextEffort;
+                    HeapNode neighbor = {newR, newC, nextEffort};
+                    pushHeap(heap, neighbor);
+                }
+            }
+        }
+    }
+
+    free(heap->data);
+    free(heap);
+    for (int i = 0; i < rows; i++) free(effortGrid[i]);
+    free(effortGrid);
+
+    return 0;
+}
+ 787
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+
+int findCheapestPrice(int n, int** flights, int flightsSize, int* flightsColSize, int src, int dst, int k) {
+    int* dist = (int*)malloc(n * sizeof(int));
+    int* temp = (int*)malloc(n * sizeof(int));
+    
+    for (int i = 0; i < n; i++) {
+        dist[i] = INT_MAX;
+    }
+    dist[src] = 0;
+
+    for (int i = 0; i <= k; i++) {
+        for (int j = 0; j < n; j++) {
+            temp[j] = dist[j];
+        }
+        
+        for (int j = 0; j < flightsSize; j++) {
+            int u = flights[j][0];
+            int v = flights[j][1];
+            int price = flights[j][2];
+            
+            if (dist[u] != INT_MAX && dist[u] + price < temp[v]) {
+                temp[v] = dist[u] + price;
+            }
+        }
+        
+        for (int j = 0; j < n; j++) {
+            dist[j] = temp[j];
+        }
+    }
+
+    int result = (dist[dst] == INT_MAX) ? -1 : dist[dst];
+    
+    free(dist);
+    free(temp);
+    
+    return result;
+}
