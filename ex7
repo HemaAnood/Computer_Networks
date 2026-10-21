@@ -1,0 +1,303 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#define PORT 5102
+#define SIZE 1024
+#define MAX_LOCATIONS 20
+
+struct Weather {
+    char location[50];
+    float temperature, humidity, pressure, wind;
+    float total_temperature;
+    int count;
+};
+
+int main(void)
+{
+    int s, i, found, opt = 1;
+    struct sockaddr_in server, client;
+    socklen_t client_len;
+    struct Weather data[MAX_LOCATIONS] = {0};
+    int locations = 0;
+
+    char msg[SIZE], reply[SIZE];
+    char command[20], place[50];
+    float temp, humidity, pressure, wind;
+    ssize_t n;
+
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+    if (s < 0) {
+        perror("socket");
+        return 1;
+    }
+
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(PORT);
+
+    if (bind(s, (struct sockaddr *)&server, sizeof(server)) < 0) {
+        perror("bind");
+        close(s);
+        return 1;
+    }
+
+    printf("UDP Weather Server running on port %d\n", PORT);
+    printf("Waiting for weather data...\n");
+
+    while (1) {
+        client_len = sizeof(client);
+
+        n = recvfrom(s, msg, SIZE - 1, 0,
+                     (struct sockaddr *)&client, &client_len);
+
+        if (n < 0) {
+            perror("recvfrom");
+            continue;
+        }
+
+        msg[n] = '\0';
+
+        /* Exit request from client */
+        if (strcmp(msg, "EXIT") == 0) {
+            strcpy(reply, "Server shutting down");
+            sendto(s, reply, strlen(reply) + 1, 0,
+                   (struct sockaddr *)&client, client_len);
+            printf("Client requested shutdown.\n");
+            break;
+        }
+
+        if (sscanf(msg, "%19s", command) != 1) {
+            strcpy(reply, "ERROR: Empty command");
+        }
+        else if (strcmp(command, "DATA") == 0) {
+            if (sscanf(msg, "%19s %49s %f %f %f %f",
+                       command, place, &temp, &humidity,
+                       &pressure, &wind) != 6) {
+                strcpy(reply, "ERROR: Invalid weather data");
+            }
+            else {
+                found = -1;
+
+                for (i = 0; i < locations; i++) {
+                    if (strcmp(data[i].location, place) == 0) {
+                        found = i;
+                        break;
+                    }
+                }
+
+                if (found == -1 && locations < MAX_LOCATIONS) {
+                    found = locations++;
+                    strcpy(data[found].location, place);
+                }
+
+                if (found == -1) {
+                    strcpy(reply, "ERROR: Maximum locations reached");
+                }
+                else {
+                    data[found].temperature = temp;
+                    data[found].humidity = humidity;
+                    data[found].pressure = pressure;
+                    data[found].wind = wind;
+                    data[found].total_temperature += temp;
+                    data[found].count++;
+
+                    snprintf(reply, sizeof(reply),
+                             "ACK: Weather data saved for %s", place);
+
+                    printf("\nWeather data received:\n");
+                    printf("Location: %s\n", place);
+                    printf("Temperature: %.1f C\n", temp);
+                    printf("Humidity: %.1f%%\n", humidity);
+                    printf("Pressure: %.1f hPa\n", pressure);
+                    printf("Wind speed: %.1f km/h\n", wind);
+                }
+            }
+        }
+        else if (strcmp(command, "QUERY") == 0) {
+            if (sscanf(msg, "%19s %49s", command, place) != 2) {
+                strcpy(reply, "ERROR: Invalid query");
+            }
+            else {
+                found = -1;
+
+                for (i = 0; i < locations; i++) {
+                    if (strcmp(data[i].location, place) == 0) {
+                        found = i;
+                        break;
+                    }
+                }
+
+                if (found == -1) {
+                    snprintf(reply, sizeof(reply),
+                             "No weather data found for %s", place);
+                }
+                else {
+                    snprintf(reply, sizeof(reply),
+                             "Location: %s\n"
+                             "Temperature: %.1f C\n"
+                             "Humidity: %.1f%%\n"
+                             "Pressure: %.1f hPa\n"
+                             "Wind speed: %.1f km/h\n"
+                             "Average temperature: %.1f C\n"
+                             "Number of readings: %d",
+                             data[found].location,
+                             data[found].temperature,
+                             data[found].humidity,
+                             data[found].pressure,
+                             data[found].wind,
+                             data[found].total_temperature /
+                                 data[found].count,
+                             data[found].count);
+                }
+            }
+        }
+        else {
+            strcpy(reply, "ERROR: Unknown command");
+        }
+
+        sendto(s, reply, strlen(reply) + 1, 0,
+               (struct sockaddr *)&client, client_len);
+    }
+
+    close(s);
+    printf("Weather server stopped.\n");
+    return 0;
+}
+
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/time.h>
+
+#define PORT 5102
+#define SIZE 1024
+
+int main(void)
+{
+    int s, choice;
+    struct sockaddr_in server;
+    struct timeval timeout = {3, 0};
+
+    char msg[SIZE], reply[SIZE], place[50];
+    float temp, humidity, pressure, wind;
+    ssize_t n;
+
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+    if (s < 0) {
+        perror("socket");
+        return 1;
+    }
+
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
+               &timeout, sizeof(timeout));
+
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+
+    if (inet_pton(AF_INET, "127.0.0.1",
+                  &server.sin_addr) != 1) {
+        printf("Invalid server address.\n");
+        close(s);
+        return 1;
+    }
+
+    while (1) {
+        printf("\n--- UDP Weather Monitoring ---\n");
+        printf("1. Send weather data\n");
+        printf("2. Query weather data\n");
+        printf("3. Exit and stop server\n");
+        printf("Enter choice: ");
+
+        if (scanf("%d", &choice) != 1) {
+            printf("Invalid input.\n");
+            break;
+        }
+
+        if (choice == 1) {
+            printf("Enter location (one word): ");
+            if (scanf("%49s", place) != 1) break;
+
+            printf("Enter temperature (C): ");
+            if (scanf("%f", &temp) != 1) break;
+
+            printf("Enter humidity (%%): ");
+            if (scanf("%f", &humidity) != 1) break;
+
+            printf("Enter pressure (hPa): ");
+            if (scanf("%f", &pressure) != 1) break;
+
+            printf("Enter wind speed (km/h): ");
+            if (scanf("%f", &wind) != 1) break;
+
+            snprintf(msg, sizeof(msg),
+                     "DATA %s %.2f %.2f %.2f %.2f",
+                     place, temp, humidity, pressure, wind);
+        }
+        else if (choice == 2) {
+            printf("Enter location to query (one word): ");
+            if (scanf("%49s", place) != 1) break;
+
+            snprintf(msg, sizeof(msg), "QUERY %s", place);
+        }
+        else if (choice == 3) {
+            strcpy(msg, "EXIT");
+
+            if (sendto(s, msg, strlen(msg) + 1, 0,
+                       (struct sockaddr *)&server,
+                       sizeof(server)) < 0) {
+                perror("sendto");
+                break;
+            }
+
+            n = recvfrom(s, reply, SIZE - 1, 0, NULL, NULL);
+
+            if (n > 0) {
+                reply[n] = '\0';
+                printf("Server: %s\n", reply);
+            }
+            else {
+                printf("No shutdown confirmation received.\n");
+            }
+
+            break;
+        }
+        else {
+            printf("Invalid choice. Enter 1, 2, or 3.\n");
+            continue;
+        }
+
+        if (sendto(s, msg, strlen(msg) + 1, 0,
+                   (struct sockaddr *)&server,
+                   sizeof(server)) < 0) {
+            perror("sendto");
+            continue;
+        }
+
+        n = recvfrom(s, reply, SIZE - 1, 0, NULL, NULL);
+
+        if (n > 0) {
+            reply[n] = '\0';
+            printf("\nServer response:\n%s\n", reply);
+        }
+        else {
+            printf("No response. Check whether the server is running.\n");
+        }
+    }
+
+    close(s);
+    printf("Weather client stopped.\n");
+    return 0;
+}
