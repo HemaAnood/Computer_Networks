@@ -1,0 +1,164 @@
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#define PORT 5101
+#define SIZE 1024
+
+int main(void)
+{
+    int server_fd, client_fd;
+    int opt = 1;
+    int i, len, palindrome;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    char str[SIZE], reply[SIZE];
+    ssize_t n;
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        perror("socket");
+        return 1;
+    }
+
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR,
+               &opt, sizeof(opt));
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&server_addr,
+             sizeof(server_addr)) < 0) {
+        perror("bind");
+        close(server_fd);
+        return 1;
+    }
+
+    if (listen(server_fd, 5) < 0) {
+        perror("listen");
+        close(server_fd);
+        return 1;
+    }
+
+    printf("TCP Palindrome Server running on port %d\n", PORT);
+    printf("Waiting for client...\n");
+
+    client_fd = accept(server_fd, (struct sockaddr *)&client_addr,
+                       &client_len);
+
+    if (client_fd < 0) {
+        perror("accept");
+        close(server_fd);
+        return 1;
+    }
+
+    n = recv(client_fd, str, SIZE - 1, 0);
+
+    if (n > 0) {
+        str[n] = '\0';
+
+        len = (int)strlen(str);
+        palindrome = 1;
+
+        for (i = 0; i < len / 2; i++) {
+            if (str[i] != str[len - 1 - i]) {
+                palindrome = 0;
+                break;
+            }
+        }
+
+        if (palindrome)
+            strcpy(reply, "The string is a palindrome");
+        else
+            strcpy(reply, "The string is not a palindrome");
+
+        if (send(client_fd, reply, strlen(reply), 0) < 0)
+            perror("send");
+
+        printf("Received string: %s\n", str);
+        printf("Result: %s\n", reply);
+    } else {
+        printf("Client sent no data or disconnected.\n");
+    }
+
+    close(client_fd);
+    close(server_fd);
+
+    printf("Server stopped.\n");
+    return 0;
+}
+
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#define PORT 5101
+#define SIZE 1024
+
+int main(void)
+{
+    int sock;
+    struct sockaddr_in server_addr;
+    char str[SIZE], reply[SIZE];
+    ssize_t n;
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("socket");
+        return 1;
+    }
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT);
+
+    if (inet_pton(AF_INET, "127.0.0.1",
+                  &server_addr.sin_addr) != 1) {
+        printf("Invalid server address.\n");
+        close(sock);
+        return 1;
+    }
+
+    if (connect(sock, (struct sockaddr *)&server_addr,
+                sizeof(server_addr)) < 0) {
+        perror("connect");
+        close(sock);
+        return 1;
+    }
+
+    printf("Enter a string: ");
+
+    if (fgets(str, sizeof(str), stdin) == NULL) {
+        close(sock);
+        return 1;
+    }
+
+    str[strcspn(str, "\n")] = '\0';
+
+    if (send(sock, str, strlen(str), 0) < 0) {
+        perror("send");
+        close(sock);
+        return 1;
+    }
+
+    n = recv(sock, reply, sizeof(reply) - 1, 0);
+
+    if (n > 0) {
+        reply[n] = '\0';
+        printf("Server response: %s\n", reply);
+    } else {
+        printf("No response received from server.\n");
+    }
+
+    close(sock);
+    return 0;
+}
